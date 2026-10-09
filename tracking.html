@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light" class="workspace-locked-root">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>AlpsAlpine — Tracking workspace</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <style>
+
+    /* v9: Keep the sign-in FORM hidden while restoring a saved session.
+       This is a loading state, not bypassing Supabase authentication. */
+    body.workspace-auth-loading #workspaceGate .workspace-login-card > h2,
+    body.workspace-auth-loading #workspaceGate .workspace-login-subtitle,
+    body.workspace-auth-loading #workspaceGate #workspaceLoginForm,
+    body.workspace-auth-loading #workspaceGate .workspace-login-footer {display:none!important;}
+    #workspaceGate .workspace-auth-loader {display:none;}
+    body.workspace-auth-loading #workspaceGate .workspace-auth-loader {display:flex;align-items:center;gap:14px;color:#234b88;font-weight:650;font-size:14px;margin:16px 0;}
+    #workspaceGate .workspace-auth-spinner {width:24px;height:24px;border:3px solid #dce8f7;border-top-color:#155cb7;border-radius:50%;animation:alps-auth-spin 0.8s linear infinite;}
+    @keyframes alps-auth-spin {to {transform:rotate(360deg);}}
+    @media(prefers-reduced-motion:reduce){#workspaceGate .workspace-auth-spinner{animation:none;border-top-color:#155cb7;}}
+    /* v10 mobile login isolation: the dashboard must not participate in layout
+       until an authorized Supabase member has finished loading shared data.
+       CSS defaults to LOCKED, even if scripts are slow/blocked. */
+    body:not(.workspace-access-granted) > .skip-link,
+    body:not(.workspace-access-granted) > .appbar,
+    body:not(.workspace-access-granted) > .app-shell { display: none !important; }
+    html.workspace-locked-root,
+    html.workspace-locked-root body {
+      height: 100%; overflow: hidden !important; overscroll-behavior: none;
+    }
+    #workspaceGate {
+      width: 100%; height: 100%; height: 100dvh;
+      overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    }
+    /* v8 sign-in experience. Isolated from the live tracking dashboard's theme. */
+    #workspaceGate[hidden], [hidden] { display:none !important; }
+    #workspaceGate {
+      position:fixed; inset:0; z-index:6000; display:grid; place-items:center;
+      overflow-y:auto; padding:28px; background:#eaf0f9;
+      background-image: radial-gradient(circle at 0% 0%, #d6e6ff 0%, transparent 37%),
+        radial-gradient(circle at 100% 100%, #dce8fb 0%, transparent 40%);
+      color:#182d4d; font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    }
+    #workspaceGate .workspace-login-shell {
+      display:grid; grid-template-columns:1.03fr 1fr; width:min(100%,1030px);
+      min-height:620px; overflow:hidden; border:1px solid rgba(34,74,126,.12);
+      border-radius:28px; background:#fff; box-shadow:0 32px 90px rgba(21,52,105,.16);
+    }
+    #workspaceGate .workspace-login-hero {
+      position:relative; display:flex; flex-direction:column; justify-content:space-between;
+      min-width:0; overflow:hidden; padding:45px; color:#fff;
+      background:linear-gradient(135deg,#09285c 0%,#0a3e90 58%,#0a5aa9 100%);
+    }
+    #workspaceGate .workspace-login-hero::before {
+      content:''; position:absolute; inset:0; opacity:.15; pointer-events:none;
+      background-image:radial-gradient(circle,rgba(255,255,255,.85) 1px,transparent 1px);
+      background-size:25px 25px;
+      mask-image:linear-gradient(to top,black 20%,transparent 92%);
+    }
+    #workspaceGate .workspace-login-glow {
+      position:absolute; width:490px; height:490px; right:-245px; top:60px; border-radius:50%;
+      border:1px solid rgba(255,255,255,.16); box-shadow:0 0 0 95px rgba(255,255,255,.025),
+        0 0 0 190px rgba(255,255,255,.018); pointer-events:none;
+    }
+    #workspaceGate .workspace-hero-top, #workspaceGate .workspace-hero-copy,
+    #workspaceGate .workspace-hero-foot, #workspaceGate .workspace-map-art {position:relative;z-index:1;}
+    #workspaceGate .workspace-hero-top {display:flex; align-items:center; gap:10px; font-size:11px; font-weight:750; letter-spacing:2.2px;}
+    #workspaceGate .workspace-hero-mark {
+      width:37px;height:37px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.28);
+      border-radius:12px;background:rgba(255,255,255,.12);font-size:19px;
+    }
+    #workspaceGate .workspace-hero-copy {margin-top:37px;max-width:420px;}
+    #workspaceGate .workspace-hero-eyebrow {
+      display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid rgba(255,255,255,.22);
+      border-radius:99px;background:rgba(255,255,255,.10);font-size:10px;letter-spacing:1.55px;font-weight:750;
+    }
+    #workspaceGate .workspace-hero-eyebrow::before {content:'';width:7px;height:7px;border-radius:50%;background:#67e9cb;box-shadow:0 0 10px #67e9cb;}
+    #workspaceGate .workspace-hero-copy h2 {color:#fff;margin:20px 0 14px;font-size:clamp(30px,3vw,42px);font-weight:760;letter-spacing:-1.6px;line-height:1.15;}
+    #workspaceGate .workspace-hero-copy p {max-width:355px;font-size:14px;line-height:1.85;color:#cfe1ff;margin:0;}
+    #workspaceGate .workspace-map-art {width:100%;max-width:440px;margin:28px auto 20px;filter:drop-shadow(0 14px 24px rgba(2,12,41,.18));}
+    #workspaceGate .workspace-map-art svg {display:block;width:100%;height:auto;}
+    #workspaceGate .workspace-hero-foot {display:flex;align-items:center;gap:9px;color:#d7e7ff;font-size:11px;letter-spacing:.35px;}
+    #workspaceGate .workspace-login-card {display:flex;flex-direction:column;justify-content:center;min-width:0;padding:46px clamp(30px,4.3vw,62px);background:#fff;color:#1a2e4e;}
+    #workspaceGate .workspace-brand-logo {width:233px;height:55px;overflow:hidden;position:relative;margin-bottom:34px;}
+    #workspaceGate .workspace-brand-logo-image {
+      display:block;position:absolute;width:450px;max-width:none;height:auto;left:50%;top:50%;transform:translate(-50%,-50%);
+    }
+    #workspaceGate .workspace-brand-logo-fallback {font-size:27px;font-family:Arial,sans-serif;color:#15509b;font-weight:850;letter-spacing:-1.4px;white-space:nowrap;}
+    #workspaceGate .workspace-login-card h2 {font-size:31px;line-height:1.18;color:#142947;letter-spacing:-1px;font-weight:760;margin:0 0 11px;}
+    #workspaceGate .workspace-login-subtitle {font-size:13px;line-height:1.75;color:#72819a;margin:0 0 31px;max-width:330px;}
+    #workspaceGate .workspace-login-card label:not(.workspace-remember-label) {display:block;font-size:12px;color:#29405f;font-weight:680;margin-bottom:8px;}
+    #workspaceGate .workspace-login-field {position:relative;margin-bottom:20px;}
+    #workspaceGate .workspace-login-input {
+      width:100%;height:52px;padding:0 45px 0 45px;background:#f8fafd;border:1px solid #dfe7f2;
+      border-radius:12px;color:#1a2e4e;font-size:13px;box-shadow:none;transition:border-color .2s,box-shadow .2s,background-color .2s;
+    }
+    #workspaceGate .workspace-login-input:focus {outline:none;border-color:#2a67cd;background:#fff;box-shadow:0 0 0 4px rgba(49,111,216,.12);}
+    #workspaceGate .workspace-login-input::placeholder {color:#9caabe;}
+    #workspaceGate .workspace-input-icon {position:absolute;left:17px;top:50%;transform:translateY(-50%);font-size:17px;color:#8494ad;pointer-events:none;}
+    #workspaceGate .workspace-eye-toggle {
+      position:absolute;right:7px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;
+      border-radius:10px;background:transparent;color:#8494ad;display:grid;place-items:center;
+    }
+    #workspaceGate .workspace-eye-toggle:hover {background:#edf3fc;color:#15509b;}
+    #workspaceGate .workspace-remember-row {display:flex;align-items:center;justify-content:space-between;gap:10px;margin:4px 0 25px;}
+    #workspaceGate .workspace-remember-label {display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-size:12px;font-weight:650;color:#334c6e;}
+    #workspaceGate #workspaceRememberMe {appearance:none;width:17px;height:17px;flex:0 0 17px;margin:0;border:1.5px solid #a8b7cc;border-radius:5px;background:#fff;cursor:pointer;display:grid;place-items:center;}
+    #workspaceGate #workspaceRememberMe:checked {background:#1754aa;border-color:#1754aa;}
+    #workspaceGate #workspaceRememberMe:checked::after {content:'';display:block;width:9px;height:5px;margin-top:-2px;border:solid white;border-width:0 0 2px 2px;transform:rotate(-45deg);}
+    #workspaceGate .workspace-session-hint {color:#8594a9;font-size:11px;white-space:nowrap;}
+    #workspaceGate #workspaceLoginButton {
+      display:flex;align-items:center;justify-content:center;gap:11px;width:100%;height:52px;border:0;border-radius:12px;
+      background:#1658b5;color:#fff;font-size:14px;font-weight:730;letter-spacing:.1px;
+      box-shadow:0 9px 20px rgba(20,84,184,.22);transition:transform .18s,box-shadow .18s,background-color .18s;
+    }
+    #workspaceGate #workspaceLoginButton:hover {background:#0d438f;transform:translateY(-1px);box-shadow:0 12px 24px rgba(20,84,184,.28);}
+    #workspaceGate #workspaceLoginButton:disabled {opacity:.72;cursor:progress;transform:none;}
+    #workspaceGate .workspace-login-message {min-height:34px;margin:18px 0 0;font-size:12px;line-height:1.6;color:#72819a;}
+    #workspaceGate .workspace-login-message.text-danger {color:#b02b38!important;}
+    #workspaceGate .workspace-login-footer {border-top:1px solid #edf1f7;padding-top:20px;margin-top:14px;display:flex;align-items:center;gap:8px;color:#8b99ab;font-size:11px;}
+    @media(max-width:790px) {
+      #workspaceGate {padding:16px;align-items:center;}
+      #workspaceGate .workspace-login-shell {width:min(100%,510px);grid-template-columns:1fr;min-height:0;border-radius:20px;}
+      #workspaceGate .workspace-login-hero {padding:22px 30px;min-height:0;}
+      #workspaceGate .workspace-hero-top {font-size:10px;}
+      #workspaceGate .workspace-hero-copy,#workspaceGate .workspace-map-art,#workspaceGate .workspace-hero-foot {display:none;}
+      #workspaceGate .workspace-login-glow {display:none;}
+      #workspaceGate .workspace-login-card {padding:29px 30px 32px;}
+      #workspaceGate .workspace-brand-logo {margin-bottom:22px;}
+    }
+    @media(max-width:420px) {
+      #workspaceGate {padding:10px;}
+      #workspaceGate .workspace-login-card {padding:27px 23px 26px;}
+      #workspaceGate .workspace-login-card h2 {font-size:26px;}
+      #workspaceGate .workspace-login-subtitle {margin-bottom:24px;}
+      #workspaceGate .workspace-session-hint {font-size:10px;white-space:normal;text-align:right;}
+    }
+    /* On narrow/short screens let the LOGIN pane scroll (not the body).
+       auto margins center the card when it fits and allow access to its top
+       when the screen shrinks (landscape / software keyboard). */
+    @media (max-width: 790px) {
+      #workspaceGate { display: flex; align-items: flex-start; justify-content: center; }
+      #workspaceGate .workspace-login-shell { flex: 0 0 auto; margin-block: auto; }
+    }
+    @media(prefers-reduced-motion:reduce) {#workspaceGate * {transition:none!important;}}
+    body.workspace-readonly #beaconList [data-edit],
+    body.workspace-readonly #beaconList [data-del],
+    body.workspace-readonly #deviceList [data-del],
+    body.workspace-readonly #deviceStatus [data-del] { display:none !important; }
+    :root {
+      --sidebar-w: 416px; --brand-blue: #275de5; --canvas: #eef5ff;
+      --page-bg-top: #f7faff; --page-bg-bottom: #edf5ff;
+      --surface: #fff; --surface-soft: #f7f9fc; --ink: #19263d;
+      --muted: #66758b; --line: #e4e9f1; --accent-soft: #edf2ff;
+      --shadow: 0 8px 30px rgb(24 44 78 / 5%);
+      --bs-primary: #275de5; --bs-primary-rgb: 39,93,229;
+      --bs-body-color: var(--ink); --bs-body-bg: var(--surface);
+      --bs-border-color: var(--line); --bs-secondary-color: var(--muted);
+    }
+    [data-bs-theme="dark"] {
+      --canvas: #0d1421; --page-bg-top: #0d1421; --page-bg-bottom: #101a2a;
+      --surface: #151f30; --surface-soft: #1b283c;
+      --ink: #e8eef9; --muted: #a4b3ca; --line: #2b3a50;
+      --accent-soft: #243756; --shadow: 0 8px 30px rgb(0 0 0 / 14%);
+      --bs-secondary-bg: #1b283c; --bs-tertiary-bg: #1b283c;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; background: linear-gradient(180deg, var(--page-bg-top) 0%, var(--page-bg-bottom) 100%); color: var(--ink); font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
+    button, input, select, textarea { font: inherit; }
+    button, a, input, select, textarea { touch-action: manipulation; }
+    :focus-visible { outline: 3px solid #7399ff !important; outline-offset: 3px; }
+    .skip-link { position: fixed; top: -80px; left: 16px; z-index: 3000; padding: 12px; background: var(--surface); color: var(--ink); }
+    .skip-link:focus { top: 12px; }
+    .appbar { height: 72px; padding: 0 28px; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .appbar .container-fluid { padding: 0; }
+    .appbar-actions { display: flex; align-items: center; gap: 10px; }
+    .country-brand { display: inline-flex; align-items: center; gap: 8px; }
+    .brand-lockup { display: flex; flex-direction: column; justify-content: center; line-height: 1.08; gap: 3px; }
+    .brand-name { color: #153d73; font-family: Arial, Helvetica, sans-serif; font-size: 21px; letter-spacing: -1px; font-weight: 800; }
+    .country-flag { display: inline-flex; align-items: center; line-height: 1; }
+    .malaysia-flag { display: block; width: 34px; height: 20px; border-radius: 4px; border: 1px solid rgb(17 45 88 / 10%); box-shadow: 0 2px 6px rgb(24 44 78 / 12%); }
+    .navbar-brand { margin: 0; color: var(--ink); font-size: 18px; letter-spacing: -.6px; font-weight: 750; }
+    .brand-mark { width: 38px; height: 38px; display: grid; place-items: center; background: var(--brand-blue); color: white; border-radius: 12px; font-size: 21px; }
+    .brand-subtitle { display: block; font-size: 10px; color: var(--muted); letter-spacing: 1.7px; font-weight: 650; text-transform: uppercase; margin-top: 2px; }
+    .header-divider { height: 28px; width: 1px; background: var(--line); margin: 0 20px; }
+    .workspace-label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 650; }
+    .platform-chip { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 650; color: var(--muted); }
+    .flag-mark { width: 32px; height: 24px; display: grid; place-items: center; border-radius: 6px; background: linear-gradient(#cc1d3b 0 12.5%, #fff 12.5% 25%, #cc1d3b 25% 37.5%, #fff 37.5% 50%, #cc1d3b 50% 62.5%, #fff 62.5% 75%, #cc1d3b 75% 87.5%, #fff 87.5%); box-shadow: 0 1px 3px rgb(24 44 78 / 14%); font-size: 20px; line-height: 1; }
+    .btn-theme { width: 38px; height: 38px; background: var(--surface-soft); color: var(--ink); border: 1px solid var(--line); }
+    .workspace-heading { height: 72px; padding: 13px 28px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; }
+    .workspace-heading h1 { font-size: 25px; letter-spacing: -.8px; font-weight: 720; margin: 0 0 5px; }
+    .workspace-heading p { margin: 0; font-size: 13px; color: var(--muted); }
+    .workspace-actions { display: flex; align-items: center; gap: 12px; margin-left: 20px; }
+    .refresh-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .refresh-status i { color: var(--brand-blue); }
+    .app-shell { height: calc(100vh - 72px); height: calc(100dvh - 72px); min-height: 420px; padding: 16px 24px 8px; display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); gap: 20px; }
+    .sidebar { min-width: 0; overflow-y: auto; padding: 0 3px 4px 0 !important; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+    .panel-nav { position: sticky; top: 0; z-index: 1010; padding: 0 0 16px; background: transparent; }
+    .nav-pills { padding: 5px; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 13px; margin: 0 !important; flex-wrap: nowrap; box-shadow: 0 2px 4px rgb(24 44 78 / 2%); overflow: hidden; isolation: isolate; }
+    .nav-pills .nav-item { flex: 1; }
+    .nav-pills .nav-link { width: 100%; padding: 10px 5px; font-size: 12px; font-weight: 650; border-radius: 9px; color: var(--muted); white-space: nowrap; }
+    .nav-pills .nav-link:hover { background: var(--surface-soft); color: var(--ink); }
+    .nav-pills .nav-link.active { color: var(--brand-blue); background: var(--accent-soft); }
+    [data-bs-theme="dark"] .nav-pills .nav-link.active { color: #a3bdff; }
+    [data-bs-theme="dark"] .nav-pills { box-shadow: 0 5px 16px rgb(0 0 0 / 18%); }
+    .panel-intro { margin: 0 0 16px; padding: 0 3px; }
+    .eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; color: var(--muted); }
+    .panel-intro h2 { font-size: 18px; letter-spacing: -.4px; margin: 6px 0 4px; font-weight: 700; }
+    .panel-intro p { font-size: 12px; color: var(--muted); margin: 0; }
+    .card { --bs-card-bg: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+    .card-body { padding: 18px; }
+    .card-title { font-size: 13px; font-weight: 720; letter-spacing: -.1px; color: var(--ink); }
+    .card-title > i { color: var(--muted); margin-right: 6px; }
+    .card-body > .d-flex { gap: 10px; flex-wrap: wrap; }
+    .card-body > .d-flex > .btn-group { flex-wrap: wrap; gap: 3px; }
+    .card-body > .d-flex > .btn-group .btn { border-radius: 7px !important; margin: 0; }
+    .btn { --bs-btn-border-radius: 9px; font-weight: 600; font-size: 12px; min-height: 36px; transition: background-color .16s, border-color .16s, box-shadow .16s; }
+    .btn:hover { box-shadow: 0 3px 9px rgb(24 44 78 / 8%); }
+    .btn-primary { --bs-btn-bg: #275de5; --bs-btn-border-color: #275de5; --bs-btn-hover-bg: #194ccc; --bs-btn-hover-border-color: #194ccc; }
+    .btn-success { --bs-btn-bg: #16836d; --bs-btn-border-color: #16836d; --bs-btn-hover-bg: #116c59; --bs-btn-hover-border-color: #116c59; }
+    .btn-outline-secondary { --bs-btn-color: var(--muted); --bs-btn-border-color: var(--line); --bs-btn-hover-bg: var(--surface-soft); --bs-btn-hover-color: var(--ink); --bs-btn-hover-border-color: #a6b5cc; }
+    .btn-outline-danger { --bs-btn-color: #cc4654; --bs-btn-border-color: var(--line); }
+    .form-control, .form-select { color: var(--ink); background-color: var(--surface-soft); border-color: var(--line); border-radius: 8px; font-size: 12px; min-height: 38px; }
+    .form-control::placeholder { color: var(--muted); opacity: .85; }
+    .form-control:focus, .form-select:focus { color: var(--ink); background-color: var(--surface); border-color: #7399ff; box-shadow: 0 0 0 3px rgb(39 93 229 / 10%); }
+    .form-label { font-size: 11px !important; color: var(--muted); font-weight: 600; }
+    .form-check-label { font-size: 12px; }
+    .form-check-input { cursor: pointer; }
+    .form-check-input:checked { background-color: var(--brand-blue); border-color: var(--brand-blue); }
+    .text-secondary { color: var(--muted) !important; }
+    .small, small { font-size: 11px; line-height: 1.6; }
+    .code, .small-monotext { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .stat { font-variant-numeric: tabular-nums; font-weight: 650; }
+    .list-group { gap: 9px; }
+    .list-group-item { padding: 13px 12px; background: var(--surface-soft); border: 1px solid var(--line) !important; border-radius: 10px !important; font-size: 12px; }
+    .list-group-item > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+    .list-group-item > .btn-group { flex-shrink: 0; display: flex; align-items: center; gap: 6px; margin-left: 12px; }
+    .list-group-item > .btn-group > .btn { margin-left: 0 !important; border-radius: 8px !important; border-width: 1px !important; min-width: 34px; }
+    .list-group-item .fw-semibold { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .badge { font-weight: 600; font-size: 9px; border-radius: 5px; padding: 4px 6px; }
+    .badge-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; flex: 0 0 7px; }
+    [data-bs-theme="dark"] .bg-secondary-subtle.text-dark { color: var(--ink) !important; }
+    .dropdown-menu { color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 36px rgb(18 33 58 / 14%); max-width: calc(100vw - 48px); }
+    .menu-scroller { max-height: 280px; overflow: auto; }
+    .menu-item { display: flex; align-items: center; gap: 6px; padding: 8px; border-radius: 7px; }
+    .menu-item:hover { background: var(--surface-soft); }
+    .tri-row { border: 1px solid var(--line); border-radius: 11px; padding: 13px; background: var(--surface-soft); overflow-wrap: anywhere; }
+    .tri-row + .tri-row { margin-top: 10px; }
+    .tri-title { font-weight: 650; font-size: 12px; }
+    .tri-row .row > .col { padding-top: 4px; padding-bottom: 4px; }
+    .link-mini .btn { padding: 5px 8px; font-size: 10px; min-height: 29px; }
+    #triInfoList:empty::after { content: 'Position details will appear for your visible trackers.'; display: block; padding: 18px 12px; color: var(--muted); font-size: 12px; text-align: center; border: 1px dashed var(--line); border-radius: 10px; }
+    #deviceList:empty::after, #beaconList:empty::after { content: 'No saved items. Add one above to get started.'; display: block; padding: 20px 12px; color: var(--muted); font-size: 12px; text-align: center; }
+    .alert { font-size: 12px; border-radius: 12px; }
+    .map-wrap { min-width: 0; min-height: 400px; position: relative; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+    .map-heading { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+    .map-heading-title { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; }
+    .map-heading-title > i { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--accent-soft); color: #537ce3; }
+    .map-heading-title small { display: block; color: var(--muted); font-size: 10px; font-weight: 400; }
+    .map-heading .form-check { margin: 0; min-height: auto; }
+    .map-canvas { flex: 1; min-height: 280px; position: relative; isolation: isolate; }
+    #map { position: absolute; inset: 0; background: #dce5ee; }
+    .toolbar { position: absolute; top: 14px; left: 58px; right: 58px; display: flex; gap: 8px; pointer-events: none; z-index: 900; }
+    .toolbar .btn-group, .toolbar .btn { pointer-events: auto; }
+    .toolbar .btn { min-height: 38px; padding: 7px 12px; }
+    #btnLocate { background: var(--surface); color: var(--ink); border-color: var(--line); }
+    .fab { position: absolute; right: 15px; bottom: 34px; z-index: 950; width: 44px; height: 44px; font-size: 17px; }
+    .shadow-soft { box-shadow: var(--shadow); }
+    .map-footer { min-height: 43px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 10px 18px; gap: 8px; border-top: 1px solid var(--line); font-size: 10px; color: var(--muted); }
+    .map-legend { display: flex; gap: 14px; }
+    .map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-dot { height: 6px; width: 6px; border-radius: 50%; }
+    .leaflet-pane.leaflet-labels-pane { z-index: 650; pointer-events: none; }
+    .leaflet-container { font-family: inherit; }
+    .leaflet-bar, .leaflet-control-layers { border: 1px solid var(--line) !important; border-radius: 10px !important; overflow: hidden; box-shadow: var(--shadow) !important; background: var(--surface); color: var(--ink); }
+    .leaflet-bar a { background: var(--surface); color: var(--ink); border-color: var(--line); width: 32px; height: 32px; line-height: 32px; }
+    .leaflet-bar a:hover { background: var(--surface-soft); color: var(--ink); }
+    .leaflet-top .leaflet-control { margin-top: 14px; }
+    .leaflet-left .leaflet-control { margin-left: 14px; }
+    .leaflet-right .leaflet-control { margin-right: 14px; }
+    .leaflet-control-attribution { font-size: 9px !important; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); color: var(--ink); }
+    .panel-hidden .app-shell { grid-template-columns: minmax(0,1fr); }
+    .panel-hidden .sidebar { display: none; }
+    .zzz { display: inline-block; margin-left: 4px; animation: zfloat 1.2s ease-in-out infinite alternate; }
+    @keyframes zfloat { from { transform: translateY(0); } to { transform: translateY(-3px); } }
+    @media (min-width: 1600px) { :root { --sidebar-w: 448px; } }
+    @media (max-width: 1100px) { :root { --sidebar-w: 375px; } .app-shell { gap: 14px; padding: 16px 18px 8px; } .workspace-heading { padding-inline: 20px; } }
+    @media (max-width: 767.98px) {
+      .appbar { height: auto; min-height: 64px; padding: 10px 16px; }
+      .header-divider, .platform-chip { display: none; }
+      .appbar .container-fluid { gap: 10px; }
+      .appbar-actions { gap: 8px; }
+      .appbar-actions .refresh-status { font-size: 10px; gap: 4px; }
+      .account-trigger { min-height: 42px; padding: 6px 10px; border-radius: 13px; }
+      .account-trigger-icon { width: 28px; height: 28px; font-size: 15px; }
+      .account-trigger-name { max-width: 138px; font-size: 12px; }
+      .account-trigger-meta { max-width: 138px; font-size: 10px; }
+      .workspace-label { font-size: 12px; gap: 6px; }
+      .malaysia-flag { width: 31px; height: 18px; }
+      .navbar-brand { font-size: 17px; }
+      .workspace-heading { height: auto; min-height: 114px; padding: 16px; align-items: flex-start; flex-wrap: wrap; justify-content: space-between; }
+      .workspace-heading h1 { font-size: 23px; }
+      .workspace-heading p { font-size: 12px; }
+      .workspace-actions { width: 100%; justify-content: space-between; flex-direction: row-reverse; margin-left: 0; }
+      .app-shell { height: auto; min-height: 0; display: flex; flex-direction: column-reverse; padding: 12px 12px 16px; gap: 16px; }
+      .sidebar { overflow: visible; padding: 0 !important; }
+      .panel-nav { top: 0; padding: 8px 0; }
+      .map-wrap { min-height: 0; height: 52dvh; min-height: 350px; flex: none; border-radius: 14px; }
+      .map-heading { padding: 12px; }
+      .map-heading-title small { display: none; }
+      .map-heading .form-check-label { font-size: 11px; }
+      .map-canvas { min-height: 240px; }
+      .map-footer { padding: 9px 12px; }
+      .map-footer > span { display: none; }
+      .toolbar { left: 55px; right: 52px; }
+      .toolbar .btn { font-size: 11px; padding: 7px 8px; }
+      .panel-hidden .map-wrap { height: calc(100dvh - 225px); min-height: 360px; }
+      .card-body { padding: 16px; }
+      input.form-control, select.form-select, textarea.form-control { font-size: 16px; }
+    }
+
+    /* v12 account menu: keep the account + role on the right and move
+       sign out, theme and panel controls into a standard dropdown menu. */
+    @media (max-width: 620px) {
+      .appbar { height: auto; min-height: 0; padding: 11px 14px 12px; }
+      .appbar .container-fluid {
+        display: flex; flex-direction: column; align-items: stretch;
+        gap: 10px; width: 100%; min-width: 0;
+      }
+      .appbar .country-brand {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 10px; min-width: 0; width: 100%;
+      }
+      .appbar .brand-lockup { min-width: 0; }
+      .appbar .workspace-label { flex: 0 0 auto; }
+      .appbar .appbar-actions {
+        display: flex; justify-content: space-between; align-items: center;
+        width: 100%; min-width: 0; gap: 8px;
+      }
+      .appbar .appbar-actions .refresh-status {
+        min-width: 0; margin-right: 0; flex: 1 1 auto; font-size: 10px;
+      }
+      .appbar .account-menu { flex: 0 1 auto; max-width: 72%; }
+      .appbar .account-trigger { width: 100%; justify-content: flex-start; }
+      .appbar .account-trigger-name, .appbar .account-trigger-meta { max-width: 100%; }
+    }
+    @media (max-width: 370px) {
+      .appbar { padding-inline: 11px; }
+      .appbar .appbar-actions { gap: 5px; }
+      .appbar .appbar-actions .refresh-status > span { display: none; }
+      .appbar .account-trigger { padding-inline: 8px; }
+      .appbar .account-trigger-name { max-width: 104px; }
+      .appbar .account-trigger-meta { max-width: 104px; }
+      .appbar .account-trigger::after { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+    }
+
+    /* Trolley map pin: location is at the pointed tip, not at the SVG center. */
+    .trolley-map-icon { background: transparent !important; border: 0 !important; }
+    .trolley-pin { position:relative; width:48px; height:60px; display:flex; flex-direction:column; align-items:center; filter:drop-shadow(0 4px 5px rgb(0 0 0 / 24%)); }
+    .trolley-card { width:43px; height:43px; display:grid; place-items:center; position:relative;
+      color:#21334d; background:#fff; border:3px solid #16846a; border-radius:13px; }
+    .trolley-tip { width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent;
+      border-top:14px solid #16846a; margin-top:-1px; }
+    .trolley-status-dot { position:absolute; width:15px; height:15px; right:-7px; top:-7px;
+      background:#16846a; border:3px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgb(0 0 0 / 22%); }
+    .trolley-offline .trolley-card { border-color:#cf3547; }
+    .trolley-offline .trolley-tip { border-top-color:#cf3547; }
+    .trolley-offline .trolley-status-dot { background:#cf3547; }
+    .trolley-sleeping .trolley-card { border-color:#e5a11d; }
+    .trolley-sleeping .trolley-tip { border-top-color:#e5a11d; }
+    .trolley-sleeping .trolley-status-dot { background:#e5a11d; }
+    .trolley-cached .trolley-card { background:#f0f3f7; }
+    .trolley-conflict .trolley-card { box-shadow:inset 0 0 0 2px #f7cb72; }
+    [data-bs-theme="dark"] .trolley-card { background:#f7faff; }
+    .trolley-legend { display:inline-flex; align-items:center; gap:5px; }
+    .trolley-legend-icon { font-size:13px; line-height:1; color:#293b53; }
+
+  </style>
+</head>
+<body class="workspace-readonly workspace-auth-loading">
+<div id="workspaceGate" role="dialog" aria-modal="true" aria-labelledby="workspaceSignInHeading">
+  <div class="workspace-login-shell">
+    <aside class="workspace-login-hero" aria-label="Indoor tracking workspace introduction">
+      <div class="workspace-login-glow" aria-hidden="true"></div>
+      <div class="workspace-hero-top"><span class="workspace-hero-mark"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i></span> INDOOR TRACKING</div>
+      <div class="workspace-hero-copy">
+        <div class="workspace-hero-eyebrow">SHARED WORKSPACE</div>
+        <h2>Everything in place.<br>Everyone in sync.</h2>
+        <p>One secure workspace to view your indoor trackers, locate assets and manage beacon configurations.</p>
+      </div>
+      <div class="workspace-map-art" aria-hidden="true">
+        <svg viewBox="0 0 438 224" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="6" width="422" height="212" rx="21" fill="#ffffff" fill-opacity=".09" stroke="#ffffff" stroke-opacity=".21"/>
+          <path d="M28 75H408 M28 148H408 M110 27V197 M219 27V197 M326 27V197" stroke="#ffffff" stroke-opacity=".14" stroke-dasharray="5 8"/>
+          <path d="M63 165L157 93L255 135L353 61" stroke="#86c8ff" stroke-width="2.4" stroke-dasharray="6 7"/>
+          <path d="M63 165L157 93L255 135L353 61" stroke="#bbddff" stroke-width="14" stroke-linecap="round" stroke-opacity=".06"/>
+          <circle cx="63" cy="165" r="14" fill="#144f93" stroke="#aedaff" stroke-width="2"/><circle cx="63" cy="165" r="5" fill="#ffffff"/>
+          <circle cx="157" cy="93" r="14" fill="#144f93" stroke="#aedaff" stroke-width="2"/><circle cx="157" cy="93" r="5" fill="#ffffff"/>
+          <circle cx="255" cy="135" r="18" fill="#64efd1" fill-opacity=".18" stroke="#78f9dd" stroke-width="2"/><circle cx="255" cy="135" r="6" fill="#78f9dd"/>
+          <circle cx="353" cy="61" r="14" fill="#144f93" stroke="#aedaff" stroke-width="2"/><circle cx="353" cy="61" r="5" fill="#ffffff"/>
+          <rect x="223" y="159" width="131" height="32" rx="9" fill="#ffffff"/><circle cx="241" cy="175" r="5" fill="#20b595"/>
+          <text x="253" y="179" fill="#15519c" font-family="Arial,sans-serif" font-weight="700" font-size="10">TRACKER ACTIVE</text>
+        </svg>
+      </div>
+      <div class="workspace-hero-foot"><i class="bi bi-shield-check" aria-hidden="true"></i> Authorized team access · Malaysia</div>
+    </aside>
+    <main class="workspace-login-card">
+      <div class="workspace-brand-logo" aria-label="Alps Alpine">
+        <img class="workspace-brand-logo-image" src="https://report-k.pdcp.jp/6770/202506/a/assets/img/common/ogp.png" alt="Alps Alpine company logo" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+        <span class="workspace-brand-logo-fallback" hidden>ALPS ALPINE</span>
+      </div>
+      <div class="workspace-auth-loader" role="status"><span class="workspace-auth-spinner" aria-hidden="true"></span><span>Restoring your secure session…</span></div>
+      <h2 id="workspaceSignInHeading">Welcome back</h2>
+      <p class="workspace-login-subtitle">Sign in to your indoor tracking workspace using your authorized account.</p>
+      <form id="workspaceLoginForm">
+        <label for="workspaceEmail">Work email</label>
+        <div class="workspace-login-field">
+          <i class="bi bi-envelope workspace-input-icon" aria-hidden="true"></i>
+          <input id="workspaceEmail" class="workspace-login-input" type="email" placeholder="name@company.com" autocomplete="username" spellcheck="false" required>
+        </div>
+        <label for="workspacePassword">Password</label>
+        <div class="workspace-login-field">
+          <i class="bi bi-lock workspace-input-icon" aria-hidden="true"></i>
+          <input id="workspacePassword" class="workspace-login-input" type="password" placeholder="Enter your password" autocomplete="current-password" required>
+          <button id="workspaceTogglePassword" class="workspace-eye-toggle" type="button" aria-label="Show password" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+        </div>
+        <div class="workspace-remember-row">
+          <label class="workspace-remember-label" for="workspaceRememberMe"><input id="workspaceRememberMe" type="checkbox"><span>Remember me</span></label>
+          <span class="workspace-session-hint" id="workspaceSessionHint">This tab only</span>
+        </div>
+        <button id="workspaceLoginButton" type="submit">Sign in to workspace <i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+      </form>
+      <p id="workspaceGateMessage" class="workspace-login-message" aria-live="polite">Checking shared workspace connection…</p>
+      <div class="workspace-login-footer"><i class="bi bi-shield-lock" aria-hidden="true"></i> Secure sign-in · Access by invitation only</div>
+    </main>
+  </div>
+</div>
+<a class="skip-link" href="#controlPanel" inert>Skip to controls</a>
+<nav class="navbar navbar-expand appbar" aria-label="Application header" inert>
+  <div class="container-fluid">
+    <div class="country-brand">
+      <span class="brand-lockup"><span class="brand-name">AlpsAlpine</span><span class="brand-subtitle">Tracking system</span></span>
+      <span class="header-divider"></span>
+      <span class="workspace-label"><span>Malaysia</span><span class="country-flag" aria-label="Malaysian flag">
+        <svg class="malaysia-flag" viewBox="0 0 56 28" role="img" aria-label="Flag of Malaysia" xmlns="http://www.w3.org/2000/svg">
+          <title>Flag of Malaysia</title>
+          <defs>
+            <clipPath id="malaysiaFlagClip"><rect x="0" y="0" width="56" height="28" rx="3" ry="3"/></clipPath>
+          </defs>
+          <g clip-path="url(#malaysiaFlagClip)">
+            <rect width="56" height="28" fill="#ffffff"/>
+            <rect y="0" width="56" height="2" fill="#c8102e"/>
+            <rect y="4" width="56" height="2" fill="#c8102e"/>
+            <rect y="8" width="56" height="2" fill="#c8102e"/>
+            <rect y="12" width="56" height="2" fill="#c8102e"/>
+            <rect y="16" width="56" height="2" fill="#c8102e"/>
+            <rect y="20" width="56" height="2" fill="#c8102e"/>
+            <rect y="24" width="56" height="2" fill="#c8102e"/>
+            <rect x="0" y="0" width="28" height="16" fill="#012a87"/>
+            <circle cx="11.9" cy="8" r="5.35" fill="#ffcd00"/>
+            <circle cx="13.55" cy="8" r="4.35" fill="#012a87"/>
+            <polygon points="18.60,3.75 19.01,6.20 20.44,4.17 19.75,6.55 21.92,5.35 20.27,7.20 22.74,7.05 20.45,8.00 22.74,8.95 20.27,8.80 21.92,10.65 19.75,9.45 20.44,11.83 19.01,9.80 18.60,12.25 18.19,9.80 16.76,11.83 17.45,9.45 15.28,10.65 16.93,8.80 14.46,8.95 16.75,8.00 14.46,7.05 16.93,7.20 15.28,5.35 17.45,6.55 16.76,4.17 18.19,6.20" fill="#ffcd00"/>
+          </g>
+        </svg>
+      </span></span>
+    </div>
+    <div class="appbar-actions">
+      <span class="refresh-status" id="uiRefreshStatus" role="status"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span>Auto-refresh</span></span>
+      <div class="dropdown account-menu">
+        <button class="btn account-trigger dropdown-toggle" type="button" id="accountMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+          <span class="account-trigger-icon"><i class="bi bi-person-circle" aria-hidden="true"></i></span>
+          <span class="account-trigger-copy">
+            <span class="account-trigger-name" id="workspaceAccountLabel">Account</span>
+            <span class="account-trigger-meta" id="workspaceRoleSummary">Not signed in</span>
+          </span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end account-dropdown shadow-soft" aria-labelledby="accountMenuButton">
+          <div class="account-dropdown-header">
+            <div class="account-dropdown-title" id="workspaceAccountLabelMenu">Account</div>
+            <div class="account-dropdown-subtitle" id="workspaceRoleMenu">Not signed in</div>
+          </div>
+          <div class="dropdown-divider"></div>
+          <div class="menu-section-label">Appearance</div>
+          <button class="dropdown-item" type="button" id="menuThemeLight"><i class="bi bi-sun" aria-hidden="true"></i><span>Light mode</span></button>
+          <button class="dropdown-item" type="button" id="menuThemeDark"><i class="bi bi-moon-stars" aria-hidden="true"></i><span>Dark mode</span></button>
+          <div class="dropdown-divider"></div>
+          <div class="menu-section-label">Workspace</div>
+          <button class="dropdown-item" type="button" id="menuTogglePanel"><i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i><span>Hide panel</span></button>
+          <button class="dropdown-item text-danger" type="button" id="menuSignOut"><i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sign out</span></button>
+        </div>
+      </div>
+      <span class="small text-secondary d-none" id="workspaceRole" aria-live="polite">Not signed in</span>
+      <button class="btn btn-sm btn-outline-secondary d-none" type="button" id="workspaceSignOut" hidden>Sign out</button>
+      <button id="uiTogglePanel" class="btn btn-outline-secondary d-none" type="button" aria-controls="controlPanel" aria-expanded="true"><i class="bi bi-layout-sidebar-inset" aria-hidden="true"></i> <span>Hide panel</span></button>
+      <button id="toggleTheme" class="btn btn-sm btn-theme d-none" type="button" title="Toggle theme" aria-label="Toggle color theme"><i class="bi bi-moon-stars" aria-hidden="true"></i></button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-shell" inert>
+  <aside class="sidebar p-3" id="controlPanel" aria-label="Tracking controls" tabindex="-1">
+    <div class="panel-nav">
+    <ul class="nav nav-pills mb-3" role="tablist" aria-label="Control sections">
+      <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#pane-live" type="button" role="tab" id="tab-live" aria-controls="pane-live" aria-selected="true"><i class="bi bi-activity me-1"></i> Live</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-trackers" type="button" role="tab" id="tab-trackers" aria-controls="pane-trackers" aria-selected="false"><i class="bi bi-hdd-network me-1"></i> Trackers</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-beacons" type="button" role="tab" id="tab-beacons" aria-controls="pane-beacons" aria-selected="false"><i class="bi bi-bezier me-1"></i> Beacons</button></li>
+      <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-settings" type="button" role="tab" id="tab-settings" aria-controls="pane-settings" aria-selected="false"><i class="bi bi-gear me-1"></i> Settings</button></li>
+    </ul>
+    </div>
+
+    <div class="tab-content">
+      <!-- LIVE -->
+      <div class="tab-pane fade show active" id="pane-live" role="tabpanel" aria-labelledby="tab-live">
+        <div class="panel-intro"><div class="eyebrow">Device management</div><h2>Live monitoring</h2><p>Monitor visible devices and their position estimates.</p></div>
+        <div id="alert" class="alert alert-danger d-none" role="alert"></div>
+
+        <div class="card shadow-soft mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <h6 class="card-title mb-2"><i class="bi bi-hdd-network" aria-hidden="true"></i> Visible devices</h6>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                  Visible devices
+                </button>
+                <div class="dropdown-menu p-2" style="min-width:320px;">
+                  <div class="d-flex justify-content-between gap-2 mb-2">
+                    <button id="btnSelectAll" class="btn btn-sm btn-outline-secondary">Select all</button>
+                    <button id="btnSelectNone" class="btn btn-sm btn-outline-secondary">Select none</button>
+                  </div>
+                  <div class="menu-scroller" id="visMenu"></div>
+                </div>
+              </div>
+            </div>
+            <ul id="deviceStatus" class="list-group list-compact mt-2"></ul>
+          </div>
+        </div>
+
+        <!-- Trilateration -->
+        <div class="card shadow-soft mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <h6 class="card-title mb-0"><i class="bi bi-bounding-box-circles" aria-hidden="true"></i> Position estimates</h6>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="centerOnUpdate" checked>
+                <label class="form-check-label" for="centerOnUpdate">Auto-center map</label>
+              </div>
+            </div>
+            <div id="triInfoList" class="mt-2"></div>
+            <div class="row g-2 align-items-end mt-3">
+              <div class="col-8">
+                <label class="form-label small mb-1" for="recordDevice">Record trilat route for</label>
+                <select id="recordDevice" class="form-select form-select-sm"></select>
+              </div>
+              <div class="col-4">
+                <div class="form-check form-switch mt-4">
+                  <input class="form-check-input" type="checkbox" id="recordTrilat">
+                  <label class="form-check-label" for="recordTrilat">Record</label>
+                </div>
+              </div>
+              <div class="col-12 d-grid mt-1">
+                <button id="btnClearTrilatRoute" class="btn btn-outline-danger btn-sm">
+                  <i class="bi bi-trash"></i> Clear route
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-soft">
+          <div class="card-body">
+            <h6 class="card-title mb-2"><i class="bi bi-sliders2" aria-hidden="true"></i> Map &amp; refresh</h6>
+
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="autorefresh" checked>
+              <label class="form-check-label" for="autorefresh">REST fallback polling (<span id="periodLabel"></span>)</label>
+            </div>
+
+            <div class="row">
+              <div class="col-6">
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" id="showBeacons" checked>
+                  <label class="form-check-label" for="showBeacons">Show beacon pins</label>
+                </div>
+              </div>
+              <div class="col-6">
+                <div class="form-check form-switch mb-2">
+                  <input class="form-check-input" type="checkbox" id="showRanges" checked>
+                  <label class="form-check-label" for="showRanges">Show beacon ranges</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-2 align-items-end">
+              <div class="col-6">
+                <label class="form-label small mb-1" for="rangeScope">Range scope</label>
+                <select id="rangeScope" class="form-select form-select-sm">
+                  <option value="all">All visible devices</option>
+                  <option value="active">Only active device</option>
+                  <option value="specific">Specific device…</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="rangeDevice">Specific device</label>
+                <select id="rangeDevice" class="form-select form-select-sm" disabled></select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TRACKERS -->
+      <div class="tab-pane fade" id="pane-trackers" role="tabpanel" aria-labelledby="tab-trackers">
+        <div class="panel-intro"><div class="eyebrow">Device management</div><h2>Your trackers</h2><p>Manage devices connected to this workspace.</p></div>
+        <div class="card shadow-soft">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <h6 class="card-title mb-0">Manage Trackers</h6>
+              <div class="btn-group btn-group-sm">
+                <button id="btnExportTrackers" class="btn btn-outline-secondary"><i class="bi bi-box-arrow-up"></i> Export</button>
+                <button id="btnImportTrackers" class="btn btn-outline-secondary"><i class="bi bi-box-arrow-in-down"></i> Import</button>
+              </div>
+            </div>
+
+            <div class="row g-2 align-items-end mt-2">
+              <div class="col-6">
+                <label class="form-label small mb-1" for="devId">Device ID</label>
+                <input id="devId" type="text" class="form-control form-control-sm" placeholder="TRA... or TRA...@user">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="devName">Name</label>
+                <input id="devName" type="text" class="form-control form-control-sm" placeholder="Tracker A">
+              </div>
+              <div class="col-12 d-grid">
+                <button id="btnAddDevice" class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Add</button>
+              </div>
+            </div>
+
+            <div class="d-flex align-items-center justify-content-between mt-3">
+              <label class="form-label small mb-0 me-2" for="trackerSearch">Search trackers</label>
+              <input id="trackerSearch" class="form-control form-control-sm w-auto" placeholder="Type to filter…">
+            </div>
+
+            <ul id="deviceList" class="list-group list-compact mt-2"></ul>
+            <p class="small text-secondary mt-2 mb-0">If the device id lacks <span class="code">@username</span>, the Username in Settings will be appended for requests.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- BEACONS -->
+      <div class="tab-pane fade" id="pane-beacons" role="tabpanel" aria-labelledby="tab-beacons">
+        <div class="panel-intro"><div class="eyebrow">Device management</div><h2>Beacon network</h2><p>Place and manage your positioning reference points.</p></div>
+        <div class="card shadow-soft mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <h6 class="card-title mb-0">Manage Beacons</h6>
+              <div class="btn-group btn-group-sm">
+                <button id="btnExport" class="btn btn-outline-secondary"><i class="bi bi-box-arrow-up"></i> Export</button>
+                <button id="btnImport" class="btn btn-outline-secondary"><i class="bi bi-box-arrow-in-down"></i> Import</button>
+                <button id="btnClearAll" class="btn btn-outline-danger"><i class="bi bi-trash"></i> Clear</button>
+              </div>
+            </div>
+            <div class="mt-2">
+              <button id="btnPlaceMode" class="btn btn-outline-primary btn-sm btn-toggle" type="button">
+                <i class="bi bi-geo-alt"></i> Place beacon on map
+              </button>
+              <div id="placeHint" class="small text-secondary mt-1 d-none">Click the map to drop a draggable marker, then press “Add / Update Beacon”.</div>
+            </div>
+
+            <div class="row g-2 align-items-end mt-2">
+              <div class="col-6">
+                <label class="form-label small mb-1" for="bName">Name / SSID</label>
+                <input id="bName" type="text" class="form-control form-control-sm" placeholder="e.g., BC1-F0F5BD...">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="bBssid">BSSID (optional)</label>
+                <input id="bBssid" type="text" class="form-control form-control-sm" placeholder="F0F5BD558985 or F0:F5:BD:55:89:85">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="bLat">Latitude</label>
+                <input id="bLat" type="number" step="any" class="form-control form-control-sm" placeholder="Click map to fill">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="bLon">Longitude</label>
+                <input id="bLon" type="number" step="any" class="form-control form-control-sm" placeholder="Click map to fill">
+              </div>
+              <div class="col-12 d-grid mt-1">
+                <button id="btnAddBeacon" class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Add / Update Beacon</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-soft mb-3">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <h6 class="card-title mb-0">Saved Beacons</h6>
+              <input id="beaconSearch" class="form-control form-control-sm w-auto" placeholder="Search">
+            </div>
+            <ul id="beaconList" class="list-group list-compact mt-2"></ul>
+          </div>
+        </div>
+
+        <!-- Scan string tester (toggle-able) -->
+        <div class="card shadow-soft">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between">
+              <h6 class="card-title mb-0">Scan string tester (debug)</h6>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="toggleScanTester">
+                <label class="form-check-label" for="toggleScanTester">Enable</label>
+              </div>
+            </div>
+            <div id="scanTester" class="mt-2 d-none">
+              <label class="form-label small" for="scanInput">Paste scan string from device</label>
+              <textarea id="scanInput" class="form-control small-monotext" rows="3" placeholder="[SSID:BC1-... BSSID:.. D:10.5 m][SSID:...]"></textarea>
+
+              <div class="row g-2 align-items-end mt-2">
+                <div class="col-8">
+                  <label class="form-label small" for="scanSource">Source device</label>
+                  <select id="scanSource" class="form-select form-select-sm"></select>
+                </div>
+                <div class="col-4 d-grid">
+                  <button id="btnScanLoad" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download"></i> Load latest</button>
+                </div>
+              </div>
+
+              <div class="row g-2 align-items-center mt-2">
+                <div class="col-12 col-lg-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="scanDraw" checked>
+                    <label class="form-check-label" for="scanDraw">Draw ranges on map</label>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="scanFit">
+                    <label class="form-check-label" for="scanFit">Fit map to drawings</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row g-2 align-items-center mt-2">
+                <div class="col-12 col-lg-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="scanAutoFill" checked>
+                    <label class="form-check-label" for="scanAutoFill">Auto-fill from selected device</label>
+                  </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="scanAutoParse" checked>
+                    <label class="form-check-label" for="scanAutoParse">Auto-parse &amp; draw</label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-flex gap-2 mt-2">
+                <button id="btnScanParse" class="btn btn-primary btn-sm"><i class="bi bi-braces"></i> Parse</button>
+                <button id="btnScanClear" class="btn btn-outline-secondary btn-sm"><i class="bi bi-eraser"></i> Clear drawings</button>
+              </div>
+              <div id="scanSummary" class="small text-secondary mt-2">—</div>
+              <pre id="scanParsed" class="mt-1 p-2 bg-body-tertiary border small-monotext" style="max-height:240px; overflow:auto;">—</pre>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="tab-pane fade" id="pane-settings" role="tabpanel" aria-labelledby="tab-settings">
+        <div class="panel-intro"><div class="eyebrow">Workspace</div><h2>Workspace settings</h2><p>Configure your connection and manage your backups.</p></div>
+        <div class="card shadow-soft">
+          <div class="card-body">
+            <h6 class="card-title mb-3">Favoriot Settings <small class="text-secondary">(shared)</small></h6>
+            <p id="workspaceAccessHint" class="small text-secondary">Shared workspace loading…</p>
+            <p id="workspaceMessage" class="small text-secondary" aria-live="polite"></p>
+            <button class="btn btn-outline-primary btn-sm mb-3" id="btnImportLocalToShared" type="button" hidden>
+              <i class="bi bi-cloud-arrow-up"></i> Upload this browser's original saved settings
+            </button>
+            <div class="row g-2">
+              <div class="col-12">
+                <label class="form-label small mb-1" for="favApiKey">Global Read API Key (used by all devices)</label>
+                <input id="favApiKey" type="text" class="form-control form-control-sm" placeholder="Paste your Favoriot Read API Key">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="favUser">Username (for device_developer_id)</label>
+                <input id="favUser" type="text" class="form-control form-control-sm" placeholder="e.g., almadesign">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="refreshSec">REST fallback interval (seconds)</label>
+                <input id="refreshSec" type="number" min="2" class="form-control form-control-sm" value="8">
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="authHeader">Auth header</label>
+                <select id="authHeader" class="form-select form-select-sm">
+                  <option value="apikey" selected>apikey: &lt;JWT&gt;</option>
+                  <option value="authorization">Authorization: Bearer &lt;JWT&gt;</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label small mb-1" for="corsProxy">CORS proxy (optional)</label>
+                <input id="corsProxy" type="text" class="form-control form-control-sm" placeholder="https://cors.isomorphic-git.org/">
+              </div>
+              <div class="col-12 mt-1">
+                <div class="form-check form-switch mb-1">
+                  <input class="form-check-input" type="checkbox" id="enableLiveSocket" checked>
+                  <label class="form-check-label fw-semibold" for="enableLiveSocket">Favoriot WebSocket live updates</label>
+                </div>
+                <div id="liveConnectionHint" class="small text-secondary">Recommended. New streams are pushed to this dashboard immediately; REST polling remains available as automatic fallback.</div>
+              </div>
+              <div class="col-12 d-grid mt-2">
+                <button id="applyFavoriot" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save settings &amp; reconnect</button>
+              </div>
+            </div>
+
+            <hr>
+            <div class="d-flex align-items-center justify-content-between">
+              <h6 class="card-title mb-0">Backup & Restore</h6>
+              <div class="btn-group btn-group-sm">
+                <button id="btnExportAll" class="btn btn-outline-secondary"><i class="bi bi-download"></i> Export All</button>
+                <button id="btnImportAll" class="btn btn-outline-secondary"><i class="bi bi-upload"></i> Import All</button>
+                <button id="btnMigrateLegacy" class="btn btn-outline-primary"><i class="bi bi-search"></i> Find legacy data (same origin)</button>
+              </div>
+            </div>
+
+            <hr>
+            <p class="small text-secondary mb-0">Tip: run this via a local server (e.g., VS Code “Live Server” or <span class="code">python -m http.server</span>) so downloads and geolocation work perfectly, and your storage origin stays consistent.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <main class="map-wrap" aria-label="Device location map">
+    <div class="map-heading">
+      <div class="map-heading-title"><i class="bi bi-map" aria-hidden="true"></i><span>Location map<small>Explore device and beacon positions</small></span></div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="enableTri2" checked>
+        <label class="form-check-label" for="enableTri2">Trilateration</label>
+      </div>
+    </div>
+    <div class="map-canvas">
+      <div id="map" aria-label="Interactive tracking map"></div>
+      <div class="toolbar">
+        <div class="btn-group shadow-soft" role="group" aria-label="Map actions">
+          <button id="btnRefresh" class="btn btn-sm btn-primary" type="button"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i> Refresh</button>
+          <button id="btnLocate" class="btn btn-sm btn-outline-light" type="button"><i class="bi bi-crosshair" aria-hidden="true"></i> Locate me</button>
+        </div>
+      </div>
+      <button id="btnLocateFab" class="btn btn-primary rounded-circle fab shadow-soft" title="Locate me (L)" aria-label="Locate me (L)" type="button"><i class="bi bi-crosshair" aria-hidden="true"></i></button>
+    </div>
+    <footer class="map-footer"><div class="map-legend" aria-label="Device status legend">
+      <span class="trolley-legend"><i class="bi bi-cart4 trolley-legend-icon" aria-hidden="true"></i><i class="legend-dot" style="background:#2e7d32"></i>Online</span>
+      <span><i class="legend-dot" style="background:#f9a825"></i>Sleeping</span>
+      <span class="trolley-legend"><i class="bi bi-cart4 trolley-legend-icon" aria-hidden="true"></i><i class="legend-dot" style="background:#c62828"></i>Offline</span>
+    </div><span>Pin tip = estimated trolley location · Bound to matched beacon area</span></footer>
+  </main>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+/* Robust theme controller. Kept in HTML so dark/light mode works independently
+   of tracking logic and even when localStorage is unavailable. */
+(() => {
+  const root = document.documentElement;
+  const btn = document.getElementById('toggleTheme');
+  if (!btn) return;
+
+  const readTheme = () => {
+    try {
+      const saved = localStorage.getItem('alps-theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+    } catch (_) {}
+    return root.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+  };
+
+  const applyTheme = (theme) => {
+    const next = theme === 'dark' ? 'dark' : 'light';
+    root.setAttribute('data-bs-theme', next);
+    root.style.colorScheme = next;
+    try { localStorage.setItem('alps-theme', next); } catch (_) {}
+
+    btn.innerHTML = next === 'dark'
+      ? '<i class="bi bi-sun" aria-hidden="true"></i>'
+      : '<i class="bi bi-moon-stars" aria-hidden="true"></i>';
+    btn.title = next === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+    btn.setAttribute('aria-label', btn.title);
+    btn.setAttribute('aria-pressed', String(next === 'dark'));
+  };
+
+  applyTheme(readTheme());
+
+  btn.addEventListener('click', (event) => {
+    event.stopImmediatePropagation();
+    const current = root.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  }, true);
+
+  window.applyTheme = applyTheme;
+  window.__ALPS_THEME_BOUND__ = true;
+})();
+</script>
+<script>
+/* Login presentation only: password visibility and remember-me explanation. */
+(() => {
+  const password = document.getElementById('workspacePassword');
+  const toggle = document.getElementById('workspaceTogglePassword');
+  if (password && toggle) toggle.addEventListener('click', () => {
+    const showing = password.type === 'password';
+    password.type = showing ? 'text' : 'password';
+    toggle.setAttribute('aria-pressed', String(showing));
+    toggle.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+    toggle.querySelector('i').className = showing ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+  const remember = document.getElementById('workspaceRememberMe');
+  const hint = document.getElementById('workspaceSessionHint');
+  const updateHint = () => { if (hint) hint.textContent = remember.checked ? 'Stay signed in' : 'This tab only'; };
+  if (remember) { remember.addEventListener('change', updateHint); updateHint(); }
+})();
+</script>
+<script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="workspace-sync.js?v=10"></script>
+<script src="tracking.js?v=10"></script>
+
+<script>
+/* Presentation only: does not modify tracking state, API calls, storage, or timers. */
+(() => {
+  const panel = document.getElementById('controlPanel');
+  const toggle = document.getElementById('uiTogglePanel');
+  toggle.addEventListener('click', () => {
+    const hidden = document.body.classList.toggle('panel-hidden');
+    panel.inert = hidden;
+    toggle.setAttribute('aria-expanded', String(!hidden));
+    toggle.querySelector('span').textContent = hidden ? 'Show panel' : 'Hide panel';
+  });
+  // Leaflet needs a size notification when its containing grid changes.
+  const canvas = document.querySelector('.map-canvas');
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(() => {
+      if (typeof map !== 'undefined' && map) map.invalidateSize({ pan: false });
+    }).observe(canvas);
+  } else {
+    toggle.addEventListener('click', () => window.dispatchEvent(new Event('resize')));
+  }
+  // tracking.js owns the connection status text (WebSocket / REST fallback).
+  const themeButton = document.getElementById('toggleTheme');
+  const proxySignOut = document.getElementById('workspaceSignOut');
+  const proxyTogglePanel = document.getElementById('uiTogglePanel');
+  const lightBtn = document.getElementById('menuThemeLight');
+  const darkBtn = document.getElementById('menuThemeDark');
+  const menuTogglePanel = document.getElementById('menuTogglePanel');
+  const menuSignOut = document.getElementById('menuSignOut');
+  const accountLabel = document.getElementById('workspaceAccountLabel');
+  const accountLabelMenu = document.getElementById('workspaceAccountLabelMenu');
+  const roleLabel = document.getElementById('workspaceRole');
+  const roleSummary = document.getElementById('workspaceRoleSummary');
+  const roleMenu = document.getElementById('workspaceRoleMenu');
+
+  const syncThemeLabel = () => themeButton.setAttribute('aria-label', themeButton.title || 'Toggle color theme');
+  new MutationObserver(syncThemeLabel).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+  syncThemeLabel();
+
+  const updatePanelMenuLabel = () => {
+    const label = proxyTogglePanel.querySelector('span')?.textContent?.trim() || 'Hide panel';
+    menuTogglePanel.querySelector('span').textContent = label;
+  };
+
+  const syncThemeMenuState = () => {
+    const current = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+    lightBtn.classList.toggle('active', current === 'light');
+    darkBtn.classList.toggle('active', current === 'dark');
+    lightBtn.setAttribute('aria-pressed', String(current === 'light'));
+    darkBtn.setAttribute('aria-pressed', String(current === 'dark'));
+  };
+
+  const parseRoleText = (value) => {
+    const clean = (value || '').replace(/\s+/g, ' ').trim();
+    if (!clean || clean.toLowerCase() === 'not signed in') return 'Not signed in';
+    return clean.replace(/^role\s*:\s*/i, '');
+  };
+
+  const updateAccountSummary = async () => {
+    let email = 'Account';
+    try {
+      if (window.sb?.auth?.getUser) {
+        const { data } = await window.sb.auth.getUser();
+        const user = data?.user;
+        if (user?.email) email = user.email;
+      }
+    } catch (_) {}
+    const roleText = parseRoleText(roleLabel?.textContent);
+    accountLabel.textContent = email;
+    accountLabelMenu.textContent = email;
+    roleSummary.textContent = roleText;
+    roleMenu.textContent = roleText;
+  };
+
+  lightBtn.addEventListener('click', () => {
+    if (window.applyTheme) window.applyTheme('light');
+    else themeButton.click();
+    syncThemeMenuState();
+  });
+  darkBtn.addEventListener('click', () => {
+    if (window.applyTheme) window.applyTheme('dark');
+    else themeButton.click();
+    syncThemeMenuState();
+  });
+  menuTogglePanel.addEventListener('click', () => {
+    proxyTogglePanel.click();
+    updatePanelMenuLabel();
+  });
+  menuSignOut.addEventListener('click', () => proxySignOut.click());
+
+  new MutationObserver(() => {
+    updateAccountSummary();
+    updatePanelMenuLabel();
+  }).observe(roleLabel, { childList: true, characterData: true, subtree: true, attributes: true });
+  new MutationObserver(syncThemeMenuState).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
+
+  document.querySelectorAll('[data-bs-toggle="pill"]').forEach(tab => {
+    tab.addEventListener('shown.bs.tab', () => { panel.scrollTop = 0; });
+  });
+
+  updatePanelMenuLabel();
+  syncThemeMenuState();
+  updateAccountSummary();
+
+  if (window.sb?.auth?.onAuthStateChange) {
+    window.sb.auth.onAuthStateChange(() => { updateAccountSummary(); });
+  }
+})();
+</script>
+
+
+</body>
+</html>
